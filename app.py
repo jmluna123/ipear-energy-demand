@@ -29,18 +29,20 @@ def info():
     config = load(connection_string=connection_string)
 
     panel_noct = config['panel:NOCT']
-    P_STC = config['panel:P_STC']
+    panel_power_stc = config['panel:P_STC']
     panel_alpha = config['panel:alpha']
     panel_area = config['panel:area']
-    I_P_mod = config['panel:I_P_mod']
-    I_SC_mod = config['panel:I_SC_mod']
+    panel_current_peak = config['panel:I_P_mod']
+    panel_sc_current = config['panel:I_SC_mod']
+
+    factor_fs = config['demand:fs']
+    days_irrigation = config['demand:DRS']
 
     map_temperature = float(data['T_amb_INFO'])
     map_radiation = float(data['rad_INFO'])
+    power = float(data['pt'])
 
-    #
-    Pt = float(data['pt'])
-    E_elec_cultivo = gc.calculate_E_elec_cultivo(Pt)  # kWh/dia
+    E_elec_cultivo = gc.calculate_E_elec_cultivo(power)  # kWh/dia
     E_elec_cultivo_anual = gc.calculate_E_elec_cultivo_anual(E_elec_cultivo)
 
     # Ingresado por el usuario
@@ -54,12 +56,12 @@ def info():
 
     T_cell = gc.calculate_T_cell(map_temperature, map_radiation, panel_noct)
     P_out = gc.calculate_P_out(
-        T_cell, panel_alpha, P_STC, map_radiation)
+        T_cell, panel_alpha, panel_power_stc, map_radiation)
     E_panel = gc.E_panel_energy(P_out)
     N_panels = gc.calculate_N_panels_theoretical(
         E_elec, E_panel)
     Potencia_Nominal = gc.calculate_Nominal_Potence(
-        N_panels, P_STC, P_out)
+        N_panels, panel_power_stc, P_out)
     Potencia_Nominal_Operacion = gc.calculate_Nominal_Potence_operating(
         N_panels, P_out)
     Area_minimaINFO = gc.min_area_panels(panel_area, N_panels)
@@ -129,25 +131,25 @@ def info():
 
     V_reg = gc.calculate_nominal_voltage(V_T_acu)
     I_reg_gen_acu = gc.calculate_nominal_intensity_switch(
-        N_paralel_max, I_SC_mod)
+        N_paralel_max, panel_sc_current)
     I_acu_recep = gc.calculate_nominal_battery_coupling_switch(
         I_max_inv)
     N_reg = math.ceil(gc.calculate_count_regulators(
         N_panels_final, N_serie, N_paralel_max))
 
     # Eléctrico: Cálculos de sistema de adaptación del suministro eléctrico (inversor)
-    N_inv = gc.calculate_count_inversors(Pt, P_inv)
+    N_inv = gc.calculate_count_inversors(power, P_inv)
 
     # Eléctrico: Cálculos de cableado
     S_cable = gc.calculate_cable_Tsection(
-        N_paralel_max, I_P_mod, V_reg)
+        N_paralel_max, panel_current_peak, V_reg)
 
     # 5. CÁLCULOS ELÉCTRICOS TOTALES DEL SUBSISTEMA DE CAPTACIÓN DE ENERGÍA
-    P_gen = gc.calculate_peak_power(N_panels_final, P_STC)
+    P_gen = gc.calculate_peak_power(N_panels_final, panel_power_stc)
     I_P_gen = gc.calculate_peak_output_intensity(
-        N_paralel, I_P_mod)
+        N_paralel, panel_current_peak)
     I_SC_gen = gc.calculate_intensity_short_circuit(
-        N_paralel, I_SC_mod)
+        N_paralel, panel_sc_current)
     V_gen = gc.calculate_output_nominal_voltage(V_mod, N_serie)
     V_P_gen = gc.calculate_peak_output_volage(V_P_mod, N_serie)
     V_OC_gen = gc.calculate_voltage_open_circuit(
@@ -180,15 +182,15 @@ def info():
     emision = gc.calculate_CO2_emision(E_elec)
     savings = gc.calculate_annual_savings(C_e, E_elec_anual)
 
-    cIGD = ((C_panel/P_STC) + (C_reg/P_reg) +
-            (C_inv/P_inv) + (C_estructure/P_STC)) * 1000
+    cIGD = ((C_panel/panel_power_stc) + (C_reg/P_reg) +
+            (C_inv/P_inv) + (C_estructure/panel_power_stc)) * 1000
 
     resp = {
         "E_acu": E_acu,
         "anual_energy": E_elec_anual,
         "emission": float("{:.2f}".format(abs(emision))),
         "cIGD": cIGD,
-        "Pt": "{:.2f}".format(Pt),
+        "Pt": "{:.2f}".format(power),
         "E_elec": "{:.2f}".format(E_elec/24),
         "E_elec_anual_M": "{:.2f}".format(E_elec_anual/1000),
         "worst_Hs_mean": "{:.2f}".format(worst_Hs_mean),
