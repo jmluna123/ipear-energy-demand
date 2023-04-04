@@ -9,7 +9,8 @@ import os
 
 import modules.generalCalculus as gc
 import modules.panelsCalculus as panelsCalculus
-import modules.crop_demand as crop_demand
+import modules.electrical_demand as electrical_demand
+import modules.panels as panels
 
 app = Flask(__name__)
 CORS(app)
@@ -24,48 +25,54 @@ df_temperature = pd.read_csv('files/temperatura_mensual.csv')
 @app.route('/info', methods=['POST'])
 def info():
     data = json.loads(request.data)['data']
-    demanda = data['demanda']
+    charges = data['demanda']
+
+    map_temperature = float(data['T_amb_INFO'])
+    map_radiation = float(data['rad_INFO'])
+    power = float(data['pt'])
 
     config = load(connection_string=connection_string)
 
     panel_noct = config['panel:NOCT']
-    P_STC = config['panel:P_STC']
+    panel_power_stc = config['panel:P_STC']
     panel_alpha = config['panel:alpha']
     panel_area = config['panel:area']
     I_P_mod = config['panel:I_P_mod']
     I_SC_mod = config['panel:I_SC_mod']
 
-    map_temperature = float(data['T_amb_INFO'])
-    map_radiation = float(data['rad_INFO'])
+    days_irrigation = config['day:DRS']
+    days_low_rain = config['day:MBP']
+    factor_fs = config['factor:fs']
 
-    #
-    Pt = float(data['pt'])
-    E_elec_cultivo = gc.calculate_E_elec_cultivo(Pt)  # kWh/dia
-    E_elec_cultivo_anual = gc.calculate_E_elec_cultivo_anual(E_elec_cultivo)
+    days_consuption = 5  # config['day:consuption']
 
-    # Ingresado por el usuario
-    dias_consumo_semana = 5
+    energy_crop = electrical_demand.get_crop_demand(
+        power, days_irrigation, factor_fs)
+    energy_crop_yearly = electrical_demand.get_crop_demand_yearly(
+        energy_crop, days_irrigation, days_low_rain)
+    total_energy_charges = electrical_demand.get_total_daily_energy(charges)
 
-    EDTC = gc.calculate_EDTC(demanda)
+    energy_demand = electrical_demand.get_energy_demand(
+        energy_crop, total_energy_charges)
+    energy_demand_yearly = electrical_demand.get_energy_demand_yearly(
+        energy_crop_yearly, total_energy_charges, days_consuption)
 
-    E_elec = gc.calculate_E_elec(E_elec_cultivo, EDTC)  # kWh/dia
-    E_elec_anual = gc.calculate_E_elec_anual(
-        E_elec_cultivo_anual, EDTC, dias_consumo_semana)
+    cell_temperature = panels.get_cell_temperature(
+        map_temperature, panel_noct, map_radiation)
+    potence_out = panels.get_potence_out(
+        cell_temperature, panel_alpha, panel_power_stc, map_radiation)
 
-    T_cell = gc.calculate_T_cell(map_temperature, map_radiation, panel_noct)
-    P_out = gc.calculate_P_out(
-        T_cell, panel_alpha, P_STC, map_radiation)
-    E_panel = gc.E_panel_energy(P_out)
+    E_panel = gc.E_panel_energy(potence_out)
     N_panels = gc.calculate_N_panels_theoretical(
-        E_elec, E_panel)
+        energy_demand, E_panel)
     Potencia_Nominal = gc.calculate_Nominal_Potence(
-        N_panels, P_STC, P_out)
+        N_panels, panel_power_stc, potence_out)
     Potencia_Nominal_Operacion = gc.calculate_Nominal_Potence_operating(
-        N_panels, P_out)
+        N_panels, potence_out)
     Area_minimaINFO = gc.min_area_panels(panel_area, N_panels)
 
     # 3.2
-    E_elec_month = pd.Series([E_elec] * 12,
+    E_elec_month = pd.Series([energy_demand] * 12,
                              index=['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto',
                                     'septiembre',
                                     'octubre', 'noviembre', 'diciembre'])
@@ -74,7 +81,7 @@ def info():
     Hs_mean = gc.obtain_Hs_last_years(df_radiation)  # kWh/(m^2 dia)
     temp_mean = gc.obtain_temp_mean_last_years(df_temperature)  # °C
 
-    Y_per_month = gc.Y(E_elec, Hs_mean)  # cociente
+    Y_per_month = gc.Y(energy_demand, Hs_mean)  # cociente
     Y_max = Y_per_month.max()
     Y_max_month = Y_per_month.index[Y_per_month ==
                                     Y_max][0]
@@ -106,7 +113,7 @@ def info():
     V_T_acu = 24  # V
     N_D = 3  # días
     C = 200  # Ah [Amperios hora]
-    E_elec_max = E_elec
+    E_elec_max = energy_demand
 
     E = gc.calculate_E(C, V_acu)
     E_acu = gc.calculate_E_acumulation_system(
@@ -136,14 +143,14 @@ def info():
         N_panels_final, N_serie, N_paralel_max))
 
     # Eléctrico: Cálculos de sistema de adaptación del suministro eléctrico (inversor)
-    N_inv = gc.calculate_count_inversors(Pt, P_inv)
+    N_inv = gc.calculate_count_inversors(power, P_inv)
 
     # Eléctrico: Cálculos de cableado
     S_cable = gc.calculate_cable_Tsection(
         N_paralel_max, I_P_mod, V_reg)
 
     # 5. CÁLCULOS ELÉCTRICOS TOTALES DEL SUBSISTEMA DE CAPTACIÓN DE ENERGÍA
-    P_gen = gc.calculate_peak_power(N_panels_final, P_STC)
+    P_gen = gc.calculate_peak_power(N_panels_final, panel_power_stc)
     I_P_gen = gc.calculate_peak_output_intensity(
         N_paralel, I_P_mod)
     I_SC_gen = gc.calculate_intensity_short_circuit(
@@ -176,21 +183,21 @@ def info():
     Ct_instalation = Ct_materiales * 0.15
     Ct_total = Ct_materiales + Ct_instalation
     return_time = gc.calculate_return_time(
-        Ct_total, C_e, E_elec_anual)
-    emision = gc.calculate_CO2_emision(E_elec)
-    savings = gc.calculate_annual_savings(C_e, E_elec_anual)
+        Ct_total, C_e, energy_demand_yearly)
+    emision = gc.calculate_CO2_emision(energy_demand)
+    savings = gc.calculate_annual_savings(C_e, energy_demand_yearly)
 
-    cIGD = ((C_panel/P_STC) + (C_reg/P_reg) +
-            (C_inv/P_inv) + (C_estructure/P_STC)) * 1000
+    cIGD = ((C_panel/panel_power_stc) + (C_reg/P_reg) +
+            (C_inv/P_inv) + (C_estructure/panel_power_stc)) * 1000
 
     resp = {
         "E_acu": E_acu,
-        "anual_energy": E_elec_anual,
+        "anual_energy": energy_demand_yearly,
         "emission": float("{:.2f}".format(abs(emision))),
         "cIGD": cIGD,
-        "Pt": "{:.2f}".format(Pt),
-        "E_elec": "{:.2f}".format(E_elec/24),
-        "E_elec_anual_M": "{:.2f}".format(E_elec_anual/1000),
+        "Pt": "{:.2f}".format(power),
+        "E_elec": "{:.2f}".format(energy_demand/24),
+        "E_elec_anual_M": "{:.2f}".format(energy_demand_yearly/1000),
         "worst_Hs_mean": "{:.2f}".format(worst_Hs_mean),
         "E_panel": "{:.2f}".format(E_panel),
         "S_T_panels": "{:.2f}".format(S_T_panels),

@@ -12,7 +12,7 @@ def calculate_E_elec_cultivo_anual(E_elec_cultivo, DRS=7, MBP=6):
 def calculate_EDTC(cargas):
     EDTC = 0
     for carga in cargas:
-        hor = carga['horas']
+        hor = carga['distribución']
         x = hor.split(':')
         total = int(x[0]) * 60 + int(x[1])
         daily_energy = calculate_daily_energy(
