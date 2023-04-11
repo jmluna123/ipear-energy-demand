@@ -12,7 +12,7 @@ def calculate_E_elec_cultivo_anual(E_elec_cultivo, DRS=7, MBP=6):
 def calculate_EDTC(cargas):
     EDTC = 0
     for carga in cargas:
-        hor = carga['horas']
+        hor = carga['distribución']
         x = hor.split(':')
         total = int(x[0]) * 60 + int(x[1])
         daily_energy = calculate_daily_energy(
@@ -20,14 +20,27 @@ def calculate_EDTC(cargas):
         EDTC = EDTC + daily_energy
     return EDTC
 
+def calculate_IPGDMAX(Pt, cargas):
+    Pt = Pt
+    for carga in cargas:
+        hor = carga['horas']
+        x = hor.split(':')
+        daily_energy = calculate_sum_potence(
+            int(carga['cantidad']), int(carga['potencia']))
+        Pt = Pt + daily_energy
+    return Pt
 
 def calculate_daily_energy(cantidad, potencia, horas):
     return cantidad * (potencia / 1000) * (horas/60)
 
+def calculate_sum_potence(amount, potence):
+    return amount * (potence / 1000)
 
 def calculate_E_elec(E_elec_cultivo, EDTC):
     return E_elec_cultivo + EDTC
 
+def calculate_cIPAE(C_acu, V_T_acu, I_max_charge):
+    return C_acu/(V_T_acu * I_max_charge)
 
 def calculate_E_elec_anual(E_elec_cultivo_anual, EDTC, dias_consumo_semana):
     return E_elec_cultivo_anual + (EDTC * 52 * dias_consumo_semana)
@@ -270,5 +283,5 @@ def calculate_annual_savings(C_e, E_elect_anual):
     return (C_e * E_elect_anual)
 
 
-def calculate_CO2_emision(E_elec, f_eco2=0.1917):
+def calculate_CO2_emision(E_elec, f_eco2):
     return (E_elec * 265 / 1000) * f_eco2
