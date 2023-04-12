@@ -26,39 +26,26 @@ df_temperature = pd.read_csv('files/temperatura_mensual.csv')
 def info():
     config = load(connection_string=connection_string)
     data = json.loads(request.data)['data']
+
     charges = data['demanda']
-
-    panel_noct = config['panel:NOCT']
-    panel_power_stc = config['panel:P_STC']
-    panel_alpha = config['panel:alpha']
-    panel_area = config['panel:area']
-    panel_current_peak = config['panel:I_P_mod']
-    panel_sc_current = config['panel:I_SC_mod']
-
-    factor_fs = config['demand:fs']
-    days_irrigation = config['demand:DRS']
-
     map_temperature = float(data['T_amb_INFO'])
     map_radiation = float(data['rad_INFO'])
-    power = float(data['pt'])
-
-    E_elec_cultivo = gc.calculate_E_elec_cultivo(power)  # kWh/dia
-    E_elec_cultivo_anual = gc.calculate_E_elec_cultivo_anual(E_elec_cultivo)
     power = float(data['pt'])
 
     panel_noct = float(config['panel:NOCT'])                    # 45 °C
     panel_power_stc = float(config['panel:P_STC'])              # 520 W
     panel_alpha = float(config['panel:alpha'])                  # -0.35 %/°C
-    width = float(config['panel:width'])                        # 2.279 m
-    height = float(config['panel:height'])                      # 1.134 m
-    I_P_mod = float(config['panel:I_P_mod'])                    # 12.6 A
-    I_SC_mod = float(config['panel:I_SC_mod'])                  # 13.55 A
+    panel_width = float(config['panel:width'])                  # 2.279 m
+    panel_height = float(config['panel:height'])                # 1.134 m
+    panel_current_peak = float(config['panel:I_P_mod'])         # 12.6 A
+    panel_sc_current = float(config['panel:I_SC_mod'])          # 13.55 A
+    panel_area = panel_width * panel_height
 
     days_irrigation = float(config['demand:DRS'])               # 7 Días
-    hours_irrigation = float(config['demand:hours'])            # 3 h
-    days_low_rain = float(config['demand:MBP'])                 # 6 Semanas
-    factor_fs = float(config['demand:fs'])                      # 1.15
     days_consuption = float(config['demand:consuption'])        # 5 Días
+    days_low_rain = float(config['demand:MBP'])                 # 6 Semanas
+    hours_irrigation = float(config['demand:hours'])            # 3 h
+    factor_fs = float(config['demand:fs'])                      # 1.15
 
     # VARIABLES CONEXION DE MODULOS
     V_tacu = float(config['other:V_tacu'])                      # 48
@@ -100,7 +87,7 @@ def info():
 
     C_reg = P_reg * C_reg_u         # $/W
     C_inv = P_inv * C_inv_u
-    panel_area = width * height
+
     energy_crop = electrical_demand.get_crop_demand(
         power, hours_irrigation, factor_fs)
     energy_crop_yearly = electrical_demand.get_crop_demand_yearly(
@@ -170,7 +157,8 @@ def info():
     # Eléctrico: Cálculos de cableado
     S_cable = gc.calculate_cable_Tsection(
         N_paralel_max, panel_current_peak, V_reg)
-    S_cable = gc.calculate_cable_Tsection(N_paralel_max, I_P_mod, V_reg)
+    S_cable = gc.calculate_cable_Tsection(
+        N_paralel_max, panel_current_peak, V_reg)
 
     # CÁLCULOS ELÉCTRICOS TOTALES DEL SUBSISTEMA DE CAPTACIÓN DE ENERGÍA
     P_gen = gc.calculate_peak_power(N_panels_final, panel_power_stc)
@@ -185,7 +173,7 @@ def info():
     V_OC_gen = gc.calculate_voltage_open_circuit(
         V_OC_mod, N_serie)
     S_T_panels = gc.calculate_panels_area(
-        N_panels_final, width, height)
+        N_panels_final, panel_width, panel_height)
 
     Ct_panels = gc.cost_panels(N_panels_final, C_panel)
     Ct_reg = gc.cost_regulator(N_reg, C_reg)
