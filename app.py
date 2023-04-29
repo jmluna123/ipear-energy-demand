@@ -26,8 +26,8 @@ df_temperature = pd.read_csv('files/temperatura_mensual.csv')
 def info():
     config = load(connection_string=connection_string)
     data = json.loads(request.data)['data']
-    charges = data['demanda']
 
+    charges = data['demanda']
     map_temperature = float(data['T_amb_INFO'])
     map_radiation = float(data['rad_INFO'])
     power = float(data['pt'])
@@ -35,16 +35,17 @@ def info():
     panel_noct = float(config['panel:NOCT'])                    # 45 °C
     panel_power_stc = float(config['panel:P_STC'])              # 520 W
     panel_alpha = float(config['panel:alpha'])                  # -0.35 %/°C
-    width = float(config['panel:width'])                        # 2.279 m
-    height = float(config['panel:height'])                      # 1.134 m
-    I_P_mod = float(config['panel:I_P_mod'])                    # 12.6 A
-    I_SC_mod = float(config['panel:I_SC_mod'])                  # 13.55 A
+    panel_width = float(config['panel:width'])                  # 2.279 m
+    panel_height = float(config['panel:height'])                # 1.134 m
+    panel_current_peak = float(config['panel:I_P_mod'])         # 12.6 A
+    panel_sc_current = float(config['panel:I_SC_mod'])          # 13.55 A
+    panel_area = panel_width * panel_height
 
     days_irrigation = float(config['demand:DRS'])               # 7 Días
-    hours_irrigation = float(config['demand:hours'])            # 3 h
-    days_low_rain = float(config['demand:MBP'])                 # 6 Semanas
-    factor_fs = float(config['demand:fs'])                      # 1.15
     days_consuption = float(config['demand:consuption'])        # 5 Días
+    days_low_rain = float(config['demand:MBP'])                 # 6 Semanas
+    hours_irrigation = float(config['demand:hours'])            # 3 h
+    factor_fs = float(config['demand:fs'])                      # 1.15
 
     # VARIABLES CONEXION DE MODULOS
     V_tacu = float(config['other:V_tacu'])                      # 48
@@ -53,11 +54,14 @@ def info():
     V_OC_mod = float(config['other:V_OC_mod'])                  # 48.92
 
     # Batería de Ni/Cd
-    C = float(config['accumulation:C'])                         # 200 Ah [Amperios hora]
-    I_max_charge = float(config['accumulation:I_max_charge'])   # 60 A   
+    # 200 Ah [Amperios hora]
+    C = float(config['accumulation:C'])
+    I_max_charge = float(config['accumulation:I_max_charge'])   # 60 A
     N_D = float(config['accumulation:N_D'])                     # 3 Días
-    P_D_diaria = float(config['accumulation:P_D_diaria'])       # 1 Tanto por uno
-    P_D_max = float(config['accumulation:P_D_max'])             # 1 Tanto por uno
+    # 1 Tanto por uno
+    P_D_diaria = float(config['accumulation:P_D_diaria'])
+    P_D_max = float(config['accumulation:P_D_max']
+                    )             # 1 Tanto por uno
     V_acu = float(config['accumulation:V_acu'])                 # 1.2 V
     V_T_acu = float(config['accumulation:V_T_acu'])             # 24 V
 
@@ -69,18 +73,21 @@ def info():
     P_reg = float(config['regulation:P_reg'])                   # 2000 V
 
     # 6 Análisis Económico
-    C_acu = float(config['economic:C_acu'])                     # 240 $/acumulador  13.2 
+    # 240 $/acumulador  13.2
+    C_acu = float(config['economic:C_acu'])
     C_e = float(config['economic:C_e'])                         # 0.15 $/kWh
     C_estructure = float(config['economic:C_estructure'])       # 10.041 $
-    C_inv_u = float(config['economic:C_inv_u'])                 # 0.151 $           0.0435
+    # 0.151 $           0.0435
+    C_inv_u = float(config['economic:C_inv_u'])
     C_panel = float(config['economic:C_panel_u'])               # 136 $
-    C_reg_u = float(config['economic:C_reg_u'])                 # 0.2145 $          0.0195
-    
+    # 0.2145 $          0.0195
+    C_reg_u = float(config['economic:C_reg_u'])
+
     f_eco2 = float(config['environmental:f_eco2'])              # 0.1917
 
     C_reg = P_reg * C_reg_u         # $/W
     C_inv = P_inv * C_inv_u
-    panel_area = width * height
+
     energy_crop = electrical_demand.get_crop_demand(
         power, hours_irrigation, factor_fs)
     energy_crop_yearly = electrical_demand.get_crop_demand_yearly(
@@ -138,29 +145,35 @@ def info():
 
     V_reg = gc.calculate_nominal_voltage(V_T_acu)
     I_reg_gen_acu = gc.calculate_nominal_intensity_switch(
-        N_paralel_max, I_SC_mod)
+        N_paralel_max, panel_sc_current)
     I_acu_recep = gc.calculate_nominal_battery_coupling_switch(I_max_inv)
     N_reg = math.ceil(gc.calculate_count_regulators(
         N_panels_final, N_serie, N_paralel_max))
 
     # Eléctrico: Cálculos de sistema de adaptación del suministro eléctrico (inversor)
     N_inv = gc.calculate_count_inversors(power, P_inv)
+    N_inv = gc.calculate_count_inversors(power, P_inv)
 
     # Eléctrico: Cálculos de cableado
-    S_cable = gc.calculate_cable_Tsection(N_paralel_max, I_P_mod, V_reg)
+    S_cable = gc.calculate_cable_Tsection(
+        N_paralel_max, panel_current_peak, V_reg)
+    S_cable = gc.calculate_cable_Tsection(
+        N_paralel_max, panel_current_peak, V_reg)
 
     # CÁLCULOS ELÉCTRICOS TOTALES DEL SUBSISTEMA DE CAPTACIÓN DE ENERGÍA
     P_gen = gc.calculate_peak_power(N_panels_final, panel_power_stc)
+    # 5. CÁLCULOS ELÉCTRICOS TOTALES DEL SUBSISTEMA DE CAPTACIÓN DE ENERGÍA
+    P_gen = gc.calculate_peak_power(N_panels_final, panel_power_stc)
     I_P_gen = gc.calculate_peak_output_intensity(
-        N_paralel, I_P_mod)
+        N_paralel, panel_current_peak)
     I_SC_gen = gc.calculate_intensity_short_circuit(
-        N_paralel, I_SC_mod)
+        N_paralel, panel_sc_current)
     V_gen = gc.calculate_output_nominal_voltage(V_mod, N_serie)
     V_P_gen = gc.calculate_peak_output_volage(V_P_mod, N_serie)
     V_OC_gen = gc.calculate_voltage_open_circuit(
         V_OC_mod, N_serie)
     S_T_panels = gc.calculate_panels_area(
-        N_panels_final, width, height)
+        N_panels_final, panel_width, panel_height)
 
     Ct_panels = gc.cost_panels(N_panels_final, C_panel)
     Ct_reg = gc.cost_regulator(N_reg, C_reg)
